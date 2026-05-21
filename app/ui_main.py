@@ -145,7 +145,7 @@ class MainWindow(QMainWindow):
                     item = NumericTableWidgetItem("" if v is None else str(v)) if j == 2 else QTableWidgetItem("" if v is None else str(v))
                     if j == 0: item.setData(Qt.UserRole, r["id"])
                     self.table.setItem(i, j, item)
-                self._set_ghs_cell(i, r.get("ghs_codes"))
+                self._set_ghs_cell(i, r["ghs_codes"])
         finally:
             self.table.blockSignals(False); self.table.setSortingEnabled(True)
 
@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
     def move_current(self):
         r = self._get_current();
         if not r: return
-        text, ok = QInputDialog.getText(self, "Location", "New location code:", text=r.get("location_code") or "")
+        text, ok = QInputDialog.getText(self, "Location", "New location code:", text=r["location_code"] or "")
         if ok:
             self.db.update_chemical(r["id"], {"location_code": text.strip() or None})
             self.db.log_action("MOVE", r["id"], r["name"], r["cas"], "location update")
@@ -236,11 +236,11 @@ class MainWindow(QMainWindow):
 
     def copy_name(self):
         r = self._get_current()
-        if r and r.get("name"): QApplication.clipboard().setText(r["name"])
+        if r and r["name"]: QApplication.clipboard().setText(r["name"])
 
     def copy_cas(self):
         r = self._get_current()
-        if r and r.get("cas"): QApplication.clipboard().setText(r["cas"])
+        if r and r["cas"]: QApplication.clipboard().setText(r["cas"])
 
     def clear_inventory_action(self):
         if not self.require_admin("clear"): return
