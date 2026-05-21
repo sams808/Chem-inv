@@ -1,9 +1,14 @@
+import hashlib
 import sqlite3
 from pathlib import Path
 
 from .logging_tools import append_log_line
 from .models import ALLOWED_STATUSES
 from .utils import now_iso
+
+
+def _hash_pin(pin: str) -> str:
+    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
 
 
 class DatabaseManager:
@@ -16,6 +21,11 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _ensure_column(self, conn, table: str, column: str, definition: str):
+        cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def initialize(self):
         with self.connect() as conn:
@@ -32,6 +42,34 @@ class DatabaseManager:
               chemical_id INTEGER, chemical_name TEXT, cas TEXT, details TEXT, user TEXT);
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
             """)
+            self._ensure_column(conn, "chemicals", "location_code", "TEXT")
+            conn.execute(
+                """
+                UPDATE chemicals
+                SET location_code = TRIM(
+                    COALESCE(NULLIF(location_room, ''), '') ||
+                    CASE WHEN NULLIF(location_cabinet, '') IS NOT NULL THEN ' ' || location_cabinet ELSE '' END ||
+                    CASE WHEN NULLIF(location_shelf, '') IS NOT NULL THEN ' ' || location_shelf ELSE '' END ||
+                    CASE WHEN NULLIF(location_detail, '') IS NOT NULL THEN ' ' || location_detail ELSE '' END
+                )
+                WHERE (location_code IS NULL OR TRIM(location_code)='')
+                """
+            )
+            if self.get_setting("admin_pin_hash") is None:
+                # TODO: replace with hashed password / lab-specific setting before real deployment.
+                self.set_setting("admin_pin_hash", _hash_pin("1234"))
+
+    def get_setting(self, key: str, default=None):
+        with self.connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str):
+        with self.connect() as conn:
+            conn.execute("INSERT INTO settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+    def verify_admin_pin(self, pin: str) -> bool:
+        return _hash_pin(pin) == self.get_setting("admin_pin_hash", "")
 
     def add_chemical(self, data: dict) -> int:
         now = now_iso()
@@ -51,6 +89,12 @@ class DatabaseManager:
         sets = ",".join(f"{k}=?" for k in data)
         with self.connect() as conn:
             conn.execute(f"UPDATE chemicals SET {sets} WHERE id=?", tuple(data.values()) + (chemical_id,))
+
+    def clear_inventory(self):
+        with self.connect() as conn:
+            conn.execute("DELETE FROM chemicals")
+            conn.execute("DELETE FROM sqlite_sequence WHERE name='chemicals'")
+        self.log_action("CLEAR_INVENTORY", None, "inventory", None, "cleared all chemicals")
 
     def list_chemicals(self):
         with self.connect() as conn:

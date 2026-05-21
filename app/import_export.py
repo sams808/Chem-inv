@@ -9,7 +9,7 @@ from .models import ALLOWED_STATUSES
 
 EXPECTED_COLUMNS = [
     "name", "cas", "formula", "supplier", "quantity", "unit", "physical_state",
-    "location_room", "location_cabinet", "location_shelf", "location_detail",
+    "location_code",
     "hazard_text", "ghs_codes", "notes", "sds_local_path", "sds_url",
     "sds_status", "status",
 ]
@@ -24,10 +24,7 @@ COLUMN_ALIASES = {
     "quantity": ["quantity", "primary_quantity"],
     "unit": ["unit", "primary_unit"],
     "physical_state": ["physical_state", "state"],
-    "location_room": ["location_room", "room", "location"],
-    "location_cabinet": ["location_cabinet", "cabinet"],
-    "location_shelf": ["location_shelf", "shelf"],
-    "location_detail": ["location_detail", "location_notes", "location_detail_raw"],
+    "location_code": ["location_code", "location", "location_room", "room", "location_cabinet", "location_shelf", "location_detail", "location_notes", "location_detail_raw"],
     "hazard_text": ["hazard_text", "hazards_raw", "hazards"],
     "ghs_codes": ["ghs_codes", "ghs"],
     "notes": ["notes"],

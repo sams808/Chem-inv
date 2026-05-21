@@ -33,3 +33,11 @@ Placer les fichiers `GHS01.png` à `GHS09.png` dans `data/ghs_pictograms/`.
 
 La base locale est créée à `data/inventory.db`.
 Ce fichier est généré localement et **ne doit pas être versionné**.
+
+## Mode Admin
+
+- L'application démarre en **Mode: Normal**.
+- Les actions sensibles (Import CSV, Clear Inventory, Backup Database) nécessitent le mode Admin.
+- PIN temporaire par défaut: `1234` (stocké en SHA-256 dans `settings.admin_pin_hash`).
+- **TODO sécurité**: remplacer ce PIN temporaire avant déploiement labo réel.
+

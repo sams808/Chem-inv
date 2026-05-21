@@ -1,12 +1,13 @@
 import webbrowser
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
-                               QMainWindow, QMenuBar, QMessageBox, QPushButton,
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QFileDialog, QHBoxLayout, QInputDialog,
+                               QLabel, QLineEdit, QMainWindow, QMenuBar, QMessageBox, QPushButton, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .ghs_tools import parse_ghs_codes
+from .ghs_tools import get_pictogram_path, ghs_label, parse_ghs_codes
 from .import_export import backup_database, export_rows, import_csv
 from .sds_tools import build_search_urls, open_local_sds
 from .ui_dashboard import DashboardPage
@@ -22,105 +23,148 @@ class NumericTableWidgetItem(QTableWidgetItem):
 
 
 class MainWindow(QMainWindow):
+    ADMIN_ONLY_ACTIONS = {"import", "clear", "backup"}
+
     def __init__(self, db, base_dir: Path):
         super().__init__()
         self.db = db
         self.base_dir = base_dir
         self.current_id = None
+        self.is_admin = False
         self.setWindowTitle("Lab Chemical Inventory Manager")
         self.resize(1280, 800)
         self._menu()
         self._ui()
+        self.set_admin_mode(False)
         self.refresh()
 
     def _menu(self):
         mb = QMenuBar(self); file_menu = mb.addMenu("File")
-        file_menu.addAction("Import CSV", self.import_csv_action)
+        self.import_action_ref = file_menu.addAction("Import CSV", self.import_csv_action)
+        self.clear_action_ref = file_menu.addAction("Clear Inventory", self.clear_inventory_action)
         file_menu.addAction("Export Inventory CSV", self.export_all)
         file_menu.addAction("Export Active Inventory CSV", self.export_active)
         file_menu.addAction("Export Logs CSV", self.export_logs)
-        file_menu.addAction("Backup Database", self.backup_action)
+        self.backup_action_ref = file_menu.addAction("Backup Database", self.backup_action)
         self.setMenuBar(mb)
 
     def _ui(self):
         c = QWidget(); self.setCentralWidget(c)
         h = QHBoxLayout(c)
         left = QVBoxLayout(); h.addLayout(left, 1)
-        for text, cb in [("Inventory", self.refresh), ("Add Chemical", self.add_chemical), ("Dashboard", self.show_dashboard), ("Logs", None), ("Settings", None)]:
-            b = QPushButton(text); left.addWidget(b)
-            if cb: b.clicked.connect(cb)
+        b_inv = QPushButton("Inventory"); b_inv.clicked.connect(self.show_inventory); left.addWidget(b_inv)
+        b_add = QPushButton("Add Chemical"); b_add.clicked.connect(self.add_chemical); left.addWidget(b_add)
+        b_dash = QPushButton("Dashboard"); b_dash.clicked.connect(self.show_dashboard); left.addWidget(b_dash)
+        left.addWidget(QPushButton("Logs")); left.addWidget(QPushButton("Settings"))
+        self.mode_label = QLabel()
+        self.unlock_admin_btn = QPushButton("Unlock Admin"); self.unlock_admin_btn.clicked.connect(self.unlock_admin)
+        self.lock_admin_btn = QPushButton("Lock Admin"); self.lock_admin_btn.clicked.connect(lambda: self.set_admin_mode(False))
+        left.addWidget(self.mode_label); left.addWidget(self.unlock_admin_btn); left.addWidget(self.lock_admin_btn)
         left.addStretch(1)
-        mid = QVBoxLayout(); h.addLayout(mid, 6)
+
+        self.stack = QStackedWidget(); h.addWidget(self.stack, 8)
+        inv_page = QWidget(); inv_layout = QHBoxLayout(inv_page)
+        mid = QVBoxLayout(); inv_layout.addLayout(mid, 6)
         self.search = QLineEdit(); self.search.setPlaceholderText("search")
         self.search.textChanged.connect(self.refresh); mid.addWidget(self.search)
-        self.status_filter = QComboBox(); self.status_filter.addItems(["all","active","empty","disposed","archived","error_duplicate"])
+        self.status_filter = QComboBox(); self.status_filter.addItems(["all", "active", "empty", "disposed", "archived", "error_duplicate", "missing_sds"])
         self.status_filter.currentTextChanged.connect(self.refresh); mid.addWidget(self.status_filter)
         self.table = QTableWidget(0, 8)
-        self.table.setHorizontalHeaderLabels(["Name","CAS","Quantity","Unit","Location","State","GHS","Status"])
+        self.table.setHorizontalHeaderLabels(["Name", "CAS", "Quantity", "Unit", "Location", "State", "GHS", "Status"])
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
         self.table.itemSelectionChanged.connect(self.select_row)
         mid.addWidget(self.table)
-        right = QVBoxLayout(); h.addLayout(right, 3)
-        self.details = QLabel("Select chemical")
-        self.details.setWordWrap(True); right.addWidget(self.details)
+        right = QVBoxLayout(); inv_layout.addLayout(right, 3)
+        self.details = QLabel("Select chemical"); self.details.setWordWrap(True); right.addWidget(self.details)
+        self.ghs_detail_widget = QWidget(); self.ghs_detail_layout = QHBoxLayout(self.ghs_detail_widget); self.ghs_detail_layout.setContentsMargins(0, 0, 0, 0); right.addWidget(self.ghs_detail_widget)
+        copy_row = QHBoxLayout();
+        b_copy_name = QPushButton("Copy name"); b_copy_name.clicked.connect(self.copy_name)
+        b_copy_cas = QPushButton("Copy CAS"); b_copy_cas.clicked.connect(self.copy_cas)
+        copy_row.addWidget(b_copy_name); copy_row.addWidget(b_copy_cas); right.addLayout(copy_row)
         for text, cb in [("Edit", self.edit_current), ("Move", self.move_current), ("Mark Empty", lambda: self.mark_state("empty", "MARK_EMPTY")), ("Mark Disposed", lambda: self.mark_state("disposed", "MARK_DISPOSED")), ("Archive", lambda: self.mark_state("archived", "ARCHIVE")), ("Open SDS", self.open_sds), ("Search SDS Online", self.search_sds)]:
             b = QPushButton(text); b.clicked.connect(cb); right.addWidget(b)
         right.addStretch(1)
+
         self.dashboard = DashboardPage(self.db)
+        self.stack.addWidget(inv_page)
+        self.stack.addWidget(self.dashboard)
+
+    def set_admin_mode(self, enabled: bool):
+        self.is_admin = enabled
+        self.mode_label.setText("Mode: Admin" if enabled else "Mode: Normal")
+        self.unlock_admin_btn.setVisible(not enabled)
+        self.lock_admin_btn.setVisible(enabled)
+        for action in (self.import_action_ref, self.clear_action_ref, self.backup_action_ref):
+            action.setEnabled(enabled)
+
+    def require_admin(self, action_name: str) -> bool:
+        if action_name not in self.ADMIN_ONLY_ACTIONS or self.is_admin:
+            return True
+        pin, ok = QInputDialog.getText(self, "Admin PIN", f"{action_name} requires admin. Enter PIN:", QLineEdit.Password)
+        if not ok:
+            return False
+        if self.db.verify_admin_pin(pin):
+            self.set_admin_mode(True)
+            return True
+        QMessageBox.warning(self, "Access denied", "Incorrect admin PIN.")
+        return False
+
+    def unlock_admin(self):
+        self.require_admin("import")
+
+    def show_inventory(self):
+        self.stack.setCurrentIndex(0)
+        self.refresh()
+
+    def show_dashboard(self):
+        self.dashboard.refresh()
+        self.stack.setCurrentIndex(1)
 
     def refresh(self):
         rows = self.db.list_chemicals()
         sf = self.status_filter.currentText(); query = self.search.text().lower().strip()
         filtered = []
         for r in rows:
-            if sf != "all" and r["status"] != sf:
+            if sf == "missing_sds" and r["sds_local_path"]:
                 continue
-            text = " ".join(str(r[k] or "") for k in ["name", "cas", "formula", "supplier", "notes"]).lower()
+            elif sf != "all" and sf != "missing_sds" and r["status"] != sf:
+                continue
+            text = " ".join(str(r[k] or "") for k in ["name", "cas", "formula", "supplier", "notes", "hazard_text", "location_code"]).lower()
             if query and query not in text:
                 continue
             filtered.append(r)
 
-        self.table.setSortingEnabled(False)
-        self.table.blockSignals(True)
+        self.table.setSortingEnabled(False); self.table.blockSignals(True)
         try:
-            self.table.clearContents()
-            self.table.setRowCount(len(filtered))
+            self.table.clearContents(); self.table.setRowCount(len(filtered))
             for i, r in enumerate(filtered):
-                loc = " / ".join([
-                    x for x in [
-                        r["location_room"],
-                        r["location_cabinet"],
-                        r["location_shelf"],
-                        r["location_detail"],
-                    ]
-                    if x
-                ])
-                vals = [
-                    r["name"],
-                    r["cas"],
-                    r["quantity"],
-                    r["unit"],
-                    loc,
-                    r["physical_state"],
-                    r["ghs_codes"],
-                    r["status"],
-                ]
+                vals = [r["name"], r["cas"], r["quantity"], r["unit"], r["location_code"], r["physical_state"], r["ghs_codes"], r["status"]]
                 for j, v in enumerate(vals):
-                    if j == 2:
-                        item = NumericTableWidgetItem("" if v is None else str(v))
-                    else:
-                        item = QTableWidgetItem("" if v is None else str(v))
-                    if j == 0:
-                        item.setData(Qt.UserRole, r["id"])
+                    item = NumericTableWidgetItem("" if v is None else str(v)) if j == 2 else QTableWidgetItem("" if v is None else str(v))
+                    if j == 0: item.setData(Qt.UserRole, r["id"])
                     self.table.setItem(i, j, item)
+                self._set_ghs_cell(i, r.get("ghs_codes"))
         finally:
-            self.table.blockSignals(False)
-            self.table.setSortingEnabled(True)
+            self.table.blockSignals(False); self.table.setSortingEnabled(True)
 
-        if not rows:
-            QMessageBox.information(self, "Inventory", "No inventory loaded yet. Import a CSV to begin.")
+    def _set_ghs_cell(self, row: int, ghs_codes: str | None):
+        codes = parse_ghs_codes(ghs_codes)
+        if not codes:
+            return
+        w = QWidget(); ly = QHBoxLayout(w); ly.setContentsMargins(2, 2, 2, 2); ly.setSpacing(2)
+        for code in codes:
+            pic = get_pictogram_path(code, self.base_dir)
+            lab = QLabel()
+            if pic.exists():
+                lab.setPixmap(QPixmap(str(pic)).scaled(QSize(24, 24), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                lab.setToolTip(f"{code} - {ghs_label(code)}")
+            else:
+                lab.setText(code)
+            ly.addWidget(lab)
+        ly.addStretch(1)
+        self.table.setCellWidget(row, 6, w)
 
     def _get_current(self):
         if self.current_id is None: return None
@@ -130,31 +174,24 @@ class MainWindow(QMainWindow):
 
     def select_row(self):
         selected = self.table.selectionModel().selectedRows()
-        if not selected:
-            return
-
-        row = selected[0].row()
-        item = self.table.item(row, 0)
-        if item is None:
-            return
-
+        if not selected: return
+        item = self.table.item(selected[0].row(), 0)
+        if item is None: return
         self.current_id = item.data(Qt.UserRole)
         r = self._get_current()
-        if not r:
-            return
-
-        self.details.setText(
-            f"{r['name']}\n"
-            f"CAS: {r['cas']}\n"
-            f"Formula: {r['formula']}\n"
-            f"Supplier: {r['supplier']}\n"
-            f"Qty: {r['quantity']} {r['unit']}\n"
-            f"Location: {r['location_room']}/{r['location_cabinet']}/{r['location_shelf']}/{r['location_detail']}\n"
-            f"Hazard: {r['hazard_text']}\n"
-            f"GHS: {', '.join(parse_ghs_codes(r['ghs_codes'])) or '-'}\n"
-            f"Notes: {r['notes']}\n"
-            f"SDS: {r['sds_status']}"
-        )
+        if not r: return
+        self.details.setText(f"{r['name']}\nCAS: {r['cas']}\nFormula: {r['formula']}\nSupplier: {r['supplier']}\nQty: {r['quantity']} {r['unit']}\nLocation: {r['location_code']}\nHazard: {r['hazard_text']}\nNotes: {r['notes']}\nSDS: {r['sds_status']}")
+        while self.ghs_detail_layout.count():
+            child = self.ghs_detail_layout.takeAt(0); w = child.widget();
+            if w: w.deleteLater()
+        for code in parse_ghs_codes(r["ghs_codes"]):
+            lbl = QLabel(); pic = get_pictogram_path(code, self.base_dir)
+            if pic.exists():
+                lbl.setPixmap(QPixmap(str(pic)).scaled(QSize(28, 28), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                lbl.setToolTip(f"{code} - {ghs_label(code)}")
+            else:
+                lbl.setText(code)
+            self.ghs_detail_layout.addWidget(lbl)
 
     def add_chemical(self):
         d = ChemicalFormDialog(self)
@@ -175,11 +212,9 @@ class MainWindow(QMainWindow):
     def move_current(self):
         r = self._get_current();
         if not r: return
-        d = ChemicalFormDialog(self, dict(r))
-        if d.exec():
-            data = d.get_data()
-            fields = {k: data.get(k) for k in ["location_room","location_cabinet","location_shelf","location_detail"]}
-            self.db.update_chemical(r["id"], fields)
+        text, ok = QInputDialog.getText(self, "Location", "New location code:", text=r.get("location_code") or "")
+        if ok:
+            self.db.update_chemical(r["id"], {"location_code": text.strip() or None})
             self.db.log_action("MOVE", r["id"], r["name"], r["cas"], "location update")
             self.refresh()
 
@@ -199,15 +234,41 @@ class MainWindow(QMainWindow):
         if not r: return
         for url in build_search_urls(r["name"], r["cas"]): webbrowser.open(url)
 
-    def show_dashboard(self):
-        self.dashboard.refresh()
-        self.setCentralWidget(self.dashboard)
+    def copy_name(self):
+        r = self._get_current()
+        if r and r.get("name"): QApplication.clipboard().setText(r["name"])
+
+    def copy_cas(self):
+        r = self._get_current()
+        if r and r.get("cas"): QApplication.clipboard().setText(r["cas"])
+
+    def clear_inventory_action(self):
+        if not self.require_admin("clear"): return
+        msg = "Clear all inventory entries? This will remove all chemicals from the local database. A backup will be created first. This cannot be undone from the UI."
+        if QMessageBox.question(self, "Confirm clear", msg) != QMessageBox.Yes: return
+        text, ok = QInputDialog.getText(self, "Type confirmation", "Type CLEAR to proceed:")
+        if not ok or text.strip() != "CLEAR":
+            QMessageBox.information(self, "Cancelled", "Clear cancelled.")
+            return
+        backup_database(self.db.db_path, self.base_dir / "data/exports")
+        self.db.clear_inventory()
+        self.refresh()
 
     def import_csv_action(self):
+        if not self.require_admin("import"): return
         f, _ = QFileDialog.getOpenFileName(self, "Import CSV", str(self.base_dir), "CSV (*.csv)")
         if not f: return
+        mode, ok = QInputDialog.getItem(self, "Import mode", "Choose import mode:", ["Append to current inventory", "Replace current inventory"], editable=False)
+        if not ok: return
         backup_database(self.db.db_path, self.base_dir / "data/exports")
+        if mode.startswith("Replace"):
+            if QMessageBox.question(self, "Confirm replace", "Replace current inventory with CSV content?") != QMessageBox.Yes:
+                return
+            self.db.clear_inventory(); action = "IMPORT_REPLACE"
+        else:
+            action = "IMPORT_APPEND"
         n = import_csv(self.db, Path(f))
+        self.db.log_action(action, None, "inventory", None, f"imported {n} rows from {f}")
         QMessageBox.information(self, "Import", f"Imported {n} rows")
         self.refresh()
 
@@ -230,5 +291,6 @@ class MainWindow(QMainWindow):
         export_rows(rows, Path(f)); self.db.log_action("EXPORT", None, "logs", None, f)
 
     def backup_action(self):
+        if not self.require_admin("backup"): return
         b = backup_database(self.db.db_path, self.base_dir / "data/exports")
         QMessageBox.information(self, "Backup", f"Backup: {b}")
