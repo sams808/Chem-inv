@@ -1,11 +1,26 @@
-import os
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
-app_dir = Path(__file__).resolve().parent / "chemical_inventory_app"
-os.chdir(app_dir)
-sys.path.insert(0, str(app_dir))
+from PySide6.QtWidgets import QApplication
 
-from main import main
+from app.database import DatabaseManager
+from app.ui_main import MainWindow
+from app.utils import ensure_app_directories
 
-main()
+
+def main() -> int:
+    base_dir = Path(__file__).resolve().parent
+    ensure_app_directories(base_dir)
+    db = DatabaseManager(base_dir / "data" / "inventory.db", base_dir)
+    db.initialize()
+
+    app = QApplication(sys.argv)
+    window = MainWindow(db, base_dir)
+    window.show()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
