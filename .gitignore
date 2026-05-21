@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+data/inventory.db
+data/*.db
+data/logs/*.log
+data/exports/*
+!data/exports/.gitkeep
+data/sds/*
+!data/sds/.gitkeep

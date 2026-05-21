@@ -7,6 +7,13 @@ def now_iso() -> str:
 
 
 def ensure_app_directories(base_dir: Path) -> None:
-    for rel in ["data", "data/logs", "data/sds", "data/ghs_pictograms", "data/exports"]:
+    for rel in [
+        "data",
+        "data/logs",
+        "data/sds",
+        "data/ghs_pictograms",
+        "data/exports",
+        "data/imports",
+    ]:
         (base_dir / rel).mkdir(parents=True, exist_ok=True)
     (base_dir / "data/logs/inventory_changes.log").touch(exist_ok=True)
