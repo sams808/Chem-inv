@@ -55,9 +55,10 @@ class DatabaseManager:
                 WHERE (location_code IS NULL OR TRIM(location_code)='')
                 """
             )
-            if self.get_setting("admin_pin_hash") is None:
+            row = conn.execute("SELECT value FROM settings WHERE key=?", ("admin_pin_hash",)).fetchone()
+            if row is None:
                 # TODO: replace with hashed password / lab-specific setting before real deployment.
-                self.set_setting("admin_pin_hash", _hash_pin("1234"))
+                conn.execute("INSERT INTO settings(key, value) VALUES(?, ?)", ("admin_pin_hash", _hash_pin("1234")))
 
     def get_setting(self, key: str, default=None):
         with self.connect() as conn:
