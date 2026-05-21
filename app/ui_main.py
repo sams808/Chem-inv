@@ -2,7 +2,7 @@ import webbrowser
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit,
                                QMainWindow, QMenuBar, QMessageBox, QPushButton,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
@@ -11,6 +11,14 @@ from .import_export import backup_database, export_rows, import_csv
 from .sds_tools import build_search_urls, open_local_sds
 from .ui_dashboard import DashboardPage
 from .ui_forms import ChemicalFormDialog
+
+
+class NumericTableWidgetItem(QTableWidgetItem):
+    def __lt__(self, other):
+        try:
+            return float(self.text()) < float(other.text())
+        except (TypeError, ValueError):
+            return super().__lt__(other)
 
 
 class MainWindow(QMainWindow):
@@ -49,6 +57,8 @@ class MainWindow(QMainWindow):
         self.status_filter.currentTextChanged.connect(self.refresh); mid.addWidget(self.status_filter)
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(["Name","CAS","Quantity","Unit","Location","State","GHS","Status"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
         self.table.itemSelectionChanged.connect(self.select_row)
         mid.addWidget(self.table)
@@ -67,18 +77,48 @@ class MainWindow(QMainWindow):
         for r in rows:
             if sf != "all" and r["status"] != sf:
                 continue
-            text = " ".join(str(r[k] or "") for k in ["name","cas","formula","supplier","notes"]).lower()
+            text = " ".join(str(r[k] or "") for k in ["name", "cas", "formula", "supplier", "notes"]).lower()
             if query and query not in text:
                 continue
             filtered.append(r)
-        self.table.setRowCount(len(filtered))
-        for i, r in enumerate(filtered):
-            loc = " / ".join([x for x in [r["location_room"], r["location_cabinet"], r["location_shelf"], r["location_detail"]] if x])
-            vals = [r["name"], r["cas"], r["quantity"], r["unit"], loc, r["physical_state"], r["ghs_codes"], r["status"]]
-            for j, v in enumerate(vals):
-                item = QTableWidgetItem(str(v or ""))
-                if j == 0: item.setData(Qt.UserRole, r["id"])
-                self.table.setItem(i, j, item)
+
+        self.table.setSortingEnabled(False)
+        self.table.blockSignals(True)
+        try:
+            self.table.clearContents()
+            self.table.setRowCount(len(filtered))
+            for i, r in enumerate(filtered):
+                loc = " / ".join([
+                    x for x in [
+                        r["location_room"],
+                        r["location_cabinet"],
+                        r["location_shelf"],
+                        r["location_detail"],
+                    ]
+                    if x
+                ])
+                vals = [
+                    r["name"],
+                    r["cas"],
+                    r["quantity"],
+                    r["unit"],
+                    loc,
+                    r["physical_state"],
+                    r["ghs_codes"],
+                    r["status"],
+                ]
+                for j, v in enumerate(vals):
+                    if j == 2:
+                        item = NumericTableWidgetItem("" if v is None else str(v))
+                    else:
+                        item = QTableWidgetItem("" if v is None else str(v))
+                    if j == 0:
+                        item.setData(Qt.UserRole, r["id"])
+                    self.table.setItem(i, j, item)
+        finally:
+            self.table.blockSignals(False)
+            self.table.setSortingEnabled(True)
+
         if not rows:
             QMessageBox.information(self, "Inventory", "No inventory loaded yet. Import a CSV to begin.")
 
@@ -89,12 +129,32 @@ class MainWindow(QMainWindow):
         return None
 
     def select_row(self):
-        items = self.table.selectedItems()
-        if not items: return
-        self.current_id = items[0].data(Qt.UserRole)
+        selected = self.table.selectionModel().selectedRows()
+        if not selected:
+            return
+
+        row = selected[0].row()
+        item = self.table.item(row, 0)
+        if item is None:
+            return
+
+        self.current_id = item.data(Qt.UserRole)
         r = self._get_current()
-        if not r: return
-        self.details.setText(f"{r['name']}\nCAS: {r['cas']}\nFormula: {r['formula']}\nSupplier: {r['supplier']}\nQty: {r['quantity']} {r['unit']}\nLocation: {r['location_room']}/{r['location_cabinet']}/{r['location_shelf']}/{r['location_detail']}\nHazard: {r['hazard_text']}\nGHS: {', '.join(parse_ghs_codes(r['ghs_codes'])) or '-'}\nNotes: {r['notes']}\nSDS: {r['sds_status']}")
+        if not r:
+            return
+
+        self.details.setText(
+            f"{r['name']}\n"
+            f"CAS: {r['cas']}\n"
+            f"Formula: {r['formula']}\n"
+            f"Supplier: {r['supplier']}\n"
+            f"Qty: {r['quantity']} {r['unit']}\n"
+            f"Location: {r['location_room']}/{r['location_cabinet']}/{r['location_shelf']}/{r['location_detail']}\n"
+            f"Hazard: {r['hazard_text']}\n"
+            f"GHS: {', '.join(parse_ghs_codes(r['ghs_codes'])) or '-'}\n"
+            f"Notes: {r['notes']}\n"
+            f"SDS: {r['sds_status']}"
+        )
 
     def add_chemical(self):
         d = ChemicalFormDialog(self)
