@@ -13,6 +13,7 @@ from .sds_tools import build_search_urls, open_local_sds
 from .ui_dashboard import DashboardPage
 from .ui_forms import ChemicalFormDialog
 from .ui_logs import LogsPage
+from .ui_manual import UserManualDialog
 
 
 class NumericTableWidgetItem(QTableWidgetItem):
@@ -51,6 +52,8 @@ class MainWindow(QMainWindow):
         mode_menu = mb.addMenu("Mode")
         mode_menu.addAction("Regular", lambda: self.set_admin_mode(False))
         mode_menu.addAction("Admin", self.activate_admin_mode)
+        help_menu = mb.addMenu("Help")
+        help_menu.addAction("User Manual", self.show_user_manual)
         self.setMenuBar(mb)
 
     def _ui(self):
@@ -151,6 +154,10 @@ class MainWindow(QMainWindow):
     def show_logs(self):
         self.logs_page.refresh()
         self.stack.setCurrentWidget(self.logs_page)
+
+    def show_user_manual(self):
+        dlg = UserManualDialog(self.base_dir, self)
+        dlg.exec()
 
     def refresh(self):
         rows = self.db.list_chemicals()
