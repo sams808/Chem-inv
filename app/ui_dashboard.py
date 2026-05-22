@@ -53,7 +53,7 @@ class DashboardPage(QWidget):
         self.layout.addLayout(self.cards_layout)
 
         self.action_summary = QLabel()
-        self.action_summary.setStyleSheet("color: #555; font-style: italic;")
+        self.action_summary.setStyleSheet("color: #dddddd; font-style: italic;")
         self.layout.addWidget(self.action_summary)
 
         self.canvas = FigureCanvas(Figure(figsize=(7, 5)))
@@ -62,8 +62,12 @@ class DashboardPage(QWidget):
     def _make_card(self, title):
         card = QLabel(f"{title}\n0")
         card.setStyleSheet(
-            "border: 1px solid #cccccc; border-radius: 6px; padding: 10px; "
-            "background: #f8f8f8; font-size: 14px;"
+            "border: 1px solid #555555; "
+            "border-radius: 6px; "
+            "padding: 10px; "
+            "background: #2f2f2f; "
+            "color: #f0f0f0; "
+            "font-size: 14px;"
         )
         card.setMinimumHeight(64)
         return card

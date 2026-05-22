@@ -1,45 +1,55 @@
 # Chem-inv User Manual
 
-## 1. What Chem-inv is
-Chem-inv is a local desktop inventory manager for laboratory chemicals.
+## 1. Purpose of Chem-inv
+Chem-inv is a local lab inventory tool that helps answer day-to-day questions such as:
+- What chemicals do we have?
+- Where are they stored?
+- Are SDS records missing?
+- What hazards are associated with each entry?
+- What changed recently?
 
-- It uses a local SQLite database for storage.
-- It is designed for tracking chemicals, locations, GHS hazards, SDS status, and audit logs.
-- It is not a replacement for institutional safety systems or official EHS requirements.
+Chem-inv supports recordkeeping and visibility. It is **not** a replacement for SDS review, the lab chemical hygiene plan, institutional EHS systems, or supervisor instructions.
 
-## 2. Basic workflow
-A typical day-to-day workflow is:
+## 2. Before using the app
+Before you start, follow these basic rules:
+- Use the lab-approved copy of the app.
+- Do **not** manually edit `data/inventory.db`.
+- Do **not** move generated database/export/log files unless you know what you are doing.
+- Keep GHS pictogram files in `data/ghs_pictograms/`.
+- Keep import files in `data/imports/`.
 
-1. Launch the app with `python main.py`.
-2. Start in Regular mode.
-3. View inventory in the main table.
-4. Search or filter inventory to find entries quickly.
-5. Select a chemical to view detailed information.
-6. Add or edit chemical entries as needed.
-7. Move products by updating `location_code`.
-8. Mark products as empty, disposed, or archived when status changes.
+## 3. Opening Chem-inv
+1. Open a terminal in the Chem-inv folder.
+2. Activate the virtual environment (if your lab uses one).
+3. Run `python main.py`.
+4. Confirm the app opens in **Regular** mode.
 
-## 3. Regular vs Admin mode
-Chem-inv separates normal operation from restricted operations.
-
+## 4. Regular mode vs Admin mode
+Use the correct mode for the task:
+- **Regular mode** is for normal browsing and routine updates.
+- **Admin mode** is for destructive or bulk operations.
 - The app starts in Regular mode.
-- Admin mode is accessed through `Mode > Admin`.
-- Temporary PIN default is `1234`.
 - Admin mode is not persisted after closing the app.
+- Use `Mode > Admin` to request Admin access.
+- Do not publish any PIN in this manual.
+- Ask the app maintainer or lab manager if Admin access is needed.
 
-Admin-only operations include:
-
+Admin-only actions:
 - Import CSV
 - Replace inventory
 - Clear inventory
 - Backup database
 - Delete chemical
 
-Regular mode allows normal browsing, searching, viewing logs/dashboard, adding/editing/moving unless changed later.
+## 5. Finding a chemical
+Step-by-step:
+1. Click **Inventory**.
+2. Use the search box.
+3. Search by name, CAS, supplier, notes, hazard text, or location.
+4. Use the status filter to narrow results.
+5. Click a row to inspect details.
 
-## 4. Inventory table
-The inventory table includes these key columns:
-
+Common columns:
 - Name
 - CAS
 - Quantity
@@ -49,45 +59,81 @@ The inventory table includes these key columns:
 - GHS
 - Status
 
-### GHS pictograms
-- Pictograms are loaded from `data/ghs_pictograms/`.
-- Expected filenames are `GHS01.png` through `GHS09.png`.
-- If a pictogram file is missing, Chem-inv shows the GHS code text as fallback.
+Status meanings:
+- `active`: in normal use/storage
+- `empty`: container recorded but no usable material remains
+- `disposed`: material removed from use/discarded
+- `archived`: retained for history, not active circulation
+- `error_duplicate`: likely duplicate or data issue needing cleanup
 
-## 5. Add/Edit Chemical
-The Add/Edit form supports the following fields:
+## 6. Reading GHS information
+Chem-inv shows hazard information using pictograms when image files are available. If images are missing, it shows GHS text codes as fallback.
 
-- `name`
-- `CAS`
-- `formula`
-- `supplier`
-- `physical_state` (dropdown: solid/liquid/gas)
-- `quantity`
-- `unit`
-- `location_code`
-- GHS selector
-- `hazard_text`
-- `notes`
-- SDS local path / SDS URL / SDS status
-- `status`
+GHS quick reference table:
 
-GHS codes are stored as semicolon-separated values, for example `GHS02;GHS07`.
+| Code | Meaning |
+| --- | --- |
+| GHS01 | Explosive |
+| GHS02 | Flammable |
+| GHS03 | Oxidizer |
+| GHS04 | Gas under pressure |
+| GHS05 | Corrosive |
+| GHS06 | Acute toxicity |
+| GHS07 | Irritant / harmful |
+| GHS08 | Health hazard |
+| GHS09 | Environmental hazard |
 
-## 6. CSV import
-CSV import is designed for batch data loading.
+GHS pictograms are a quick visual aid only. Always read the SDS before handling chemicals.
 
-- CSV files should be placed in `data/imports/`.
-- Import is Admin-only.
+## 7. Adding a chemical
+Detailed steps:
+1. Click **Add Chemical**.
+2. Enter the chemical name.
+3. Enter CAS if known.
+4. Enter formula and supplier if useful.
+5. Choose physical state.
+6. Enter quantity and unit.
+7. Enter location code.
+8. Select GHS pictograms based on SDS.
+9. Add hazard text and notes.
+10. Add SDS path/URL/status if available.
+11. Save and confirm the entry appears in Inventory.
 
-Import modes:
+Practical guidance:
+- Do not invent CAS numbers.
+- Leave uncertain fields blank rather than guessing.
+- Use notes to document uncertainty or follow-up needed.
 
-- **Append to current inventory**
-- **Replace current inventory**
+## 8. Editing, moving, and status changes
+Use these actions based on what happened physically in the lab:
+- **Edit**: correct or update record details (name, CAS, quantity, hazards, SDS, etc.).
+- **Move**: update `location_code` when storage location changes.
+- **Mark Empty**: use when container remains but material is exhausted.
+- **Mark Disposed**: use when material has been discarded according to procedure.
+- **Archive**: keep a historical record that is no longer active.
 
-Replace mode creates a backup first, then clears existing inventory before importing.
+## 9. Delete vs Archive
+Choose carefully:
+- **Archive** keeps history and should be the default for normal lifecycle changes.
+- **Delete** permanently removes the row.
+- Delete is Admin-only.
+- Delete is for mistakes/duplicates, not normal chemical lifecycle.
+- Delete actions are logged.
 
-Expected import aliases:
+## 10. Importing CSV files
+Step-by-step:
+1. Put the CSV file in `data/imports/`.
+2. Switch to Admin mode.
+3. Use `File > Import CSV`.
+4. Choose the file.
+5. Choose **Append** or **Replace**.
 
+What the modes do:
+- **Append** adds rows and can create duplicates.
+- **Replace** creates a backup first, clears current inventory, then imports new rows.
+- After import, check both Dashboard and Inventory for sanity.
+
+Supported CSV aliases:
 - `material_name` -> `name`
 - `cas_number` -> `cas`
 - `primary_quantity` -> `quantity`
@@ -97,53 +143,44 @@ Expected import aliases:
 - `ghs_codes` -> `ghs_codes`
 - `active` -> `status`
 
-Extra metadata kept in notes:
+## 11. Backups and exports
+Chem-inv includes routine data-output tools:
+- Backup database
+- Export Inventory CSV
+- Export Active Inventory CSV
+- Export Logs CSV
 
-- `family`
-- `hazard_tags`
-- `hazard_rank_0_5`
-- `quantity_gas_ft3`
-- `quantity_liquid_l`
-- `quantity_solid_kg`
+Generated files are written to `data/exports/`.
+Always perform a backup before major imports or bulk operations.
 
-## 7. Backups, exports, and generated files
-Chem-inv keeps all data local.
+## 12. SDS workflow
+Use SDS fields consistently:
+- **Local SDS path**: points to a local file copy.
+- **SDS URL**: points to a trusted online source.
+- **Open SDS**: opens local SDS path when configured.
+- **Search SDS Online**: helps locate a source when missing.
+- **Missing SDS** appears on the Dashboard and should be reviewed regularly.
 
-- Local DB is `data/inventory.db`.
-- Backups go to `data/exports/`.
-- Exports go to `data/exports/`.
-- Logs are stored in SQLite and text log outputs.
-- Generated files should not be committed to Git.
+Users must verify the SDS source is correct and current.
 
-## 8. SDS management
-SDS handling is available directly in the app.
+## 13. Logs page
+The Logs page provides traceability of actions.
 
-- SDS local path field stores local document references.
-- SDS URL field stores online SDS links.
-- **Open SDS** button opens configured local SDS path.
-- **Search SDS Online** button performs a web search for SDS resources.
-- Missing SDS appears in dashboard summaries and can be filtered.
+Typical log columns include:
+- Timestamp
+- Mode
+- Action
+- Chemical
+- CAS
+- Details
+- User
 
-## 9. Logs page
-The Logs page provides an action history.
+Logs indicate whether actions happened in Regular or Admin mode. Logs support traceability, but they are not formal EHS records.
 
-- Logs show audit trail data from SQLite.
-- Log columns include:
-  - Timestamp
-  - Mode
-  - Action
-  - Chemical
-  - CAS
-  - Details
-  - User
-- Mode can be Regular or Admin.
-- Logs support traceability but are not a formal EHS compliance record.
+## 14. Dashboard
+The Dashboard gives a quick quality and status overview.
 
-## 10. Dashboard
-The dashboard provides quick operational visibility.
-
-Summary cards include:
-
+Cards:
 - Total chemicals
 - Active
 - Missing SDS
@@ -151,53 +188,56 @@ Summary cards include:
 - Suspicious CAS
 - Archived / Disposed
 
-Plots include:
-
+Charts:
 - Count by status
 - Count by GHS
 - Top locations
 - Problems overview
 
-Use **Refresh Dashboard** to update metrics after data changes.
+After imports or large edits, click **Refresh Dashboard** and review unusual counts before continuing.
 
-## 11. Delete vs Archive
-Use status changes carefully:
+## 15. Good lab habits
+- Use consistent location codes.
+- Avoid duplicate location spellings.
+- Keep CAS values clean.
+- Do not guess hazards.
+- Prefer Archive/Disposed over Delete.
+- Backup before bulk work.
+- Review dashboard regularly.
+- Ask before using Admin mode.
 
-- Archive keeps a chemical in the database with status `archived`.
-- Delete permanently removes the row from inventory.
-- Delete is Admin-only.
-- Delete actions are still logged.
+## 16. Troubleshooting
+**Q: The app opens empty. What should I check?**  
+A: Confirm you are using the expected dataset and that inventory data has been loaded.
 
-## 12. Recommended lab practices
-Recommended usage patterns:
+**Q: GHS shows text instead of icons. Why?**  
+A: Pictogram image files are likely missing from `data/ghs_pictograms/`.
 
-- Use consistent `location_code` conventions.
-- Keep GHS pictograms installed and complete.
-- Review Missing SDS dashboard indicators regularly.
-- Prefer Archive/Disposed over Delete unless entry data is incorrect.
-- Backup before major imports.
-- Perform a quick audit after CSV import.
-- Use notes for unusual storage conditions or hazards.
-- Do not rely on this app alone for emergency response.
+**Q: I see duplicate entries after import. What happened?**  
+A: Append mode can add duplicates. Clean up duplicates or use Replace (with backup) when appropriate.
 
-## 13. Troubleshooting
-Common issues and checks:
+**Q: I cannot import or delete. Why?**  
+A: These are Admin-only actions. Request authorized Admin access.
 
-- **App starts empty**: import CSV data or verify `data/inventory.db` exists and is populated.
-- **GHS shows text codes**: pictogram PNGs are missing in `data/ghs_pictograms/`.
-- **CSV import creates duplicates**: use Replace inventory mode or clear inventory first.
-- **Admin PIN not accepted**: verify temporary PIN/default settings.
-- **Logs empty**: no actions have been performed yet, or DB/log data was reset.
-- **Dashboard empty**: inventory data is not loaded.
+**Q: Dashboard says many SDS are missing. What now?**  
+A: Prioritize SDS completion using local paths/URLs and verify each source.
 
-## 14. File/folder reference
-Quick path reference:
+**Q: Logs page is empty. Is that an error?**  
+A: Not necessarily. It may mean no logged actions yet in the current dataset.
 
+**Q: A CAS number looks wrong. What should I do?**  
+A: Check source documents, correct the record, and leave notes if verification is pending.
+
+## 17. Folder reference
 - `main.py`
 - `app/`
+- `docs/user_manual.md`
+- `data/inventory.db`
 - `data/imports/`
 - `data/ghs_pictograms/`
 - `data/sds/`
 - `data/exports/`
 - `data/logs/`
-- `data/inventory.db`
+
+## 18. Safety note
+Always follow the lab chemical hygiene plan, SDS, institutional EHS policies, and supervisor instructions. When in doubt, stop and ask. Chem-inv helps organize information; it does not decide whether a chemical operation is safe.
