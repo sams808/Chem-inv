@@ -16,14 +16,28 @@ class ChemicalFormDialog(QDialog):
         data = data or {}
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        for name in ["name", "cas", "formula", "supplier", "unit", "physical_state", "location_code", "sds_local_path", "sds_url", "sds_status"]:
+        for name in ["name", "cas", "formula", "supplier"]:
             w = QLineEdit(str(data.get(name, "") or ""))
             self.fields[name] = w
             form.addRow(name, w)
+
+        self.physical_state = QComboBox()
+        self.physical_state.addItems(["solid", "liquid", "gas"])
+        existing_state = str(data.get("physical_state") or "").strip().lower()
+        if existing_state in {"solid", "liquid", "gas"}:
+            self.physical_state.setCurrentText(existing_state)
+        elif existing_state:
+            self.physical_state.addItem(existing_state)
+            self.physical_state.setCurrentText(existing_state)
+        form.addRow("physical_state", self.physical_state)
+
         self.quantity = QDoubleSpinBox(); self.quantity.setMaximum(1e9); self.quantity.setValue(float(data.get("quantity") or 0)); form.addRow("quantity", self.quantity)
-        self.status = QComboBox(); self.status.addItems(["active", "empty", "disposed", "archived", "error_duplicate"]); self.status.setCurrentText(data.get("status", "active")); form.addRow("status", self.status)
-        self.hazard = QTextEdit(data.get("hazard_text") or ""); form.addRow("hazard_text", self.hazard)
-        self.notes = QTextEdit(data.get("notes") or ""); form.addRow("notes", self.notes)
+        self.unit = QLineEdit(str(data.get("unit", "") or "")); form.addRow("unit", self.unit)
+
+        for name in ["location_code"]:
+            w = QLineEdit(str(data.get(name, "") or ""))
+            self.fields[name] = w
+            form.addRow(name, w)
 
         ghs_wrap = QWidget()
         ghs_layout = QGridLayout(ghs_wrap)
@@ -41,6 +55,16 @@ class ChemicalFormDialog(QDialog):
             ghs_layout.addWidget(btn, idx // 3, idx % 3)
             self.ghs_buttons[code] = btn
         form.addRow("ghs_codes", ghs_wrap)
+
+        self.hazard = QTextEdit(data.get("hazard_text") or ""); form.addRow("hazard_text", self.hazard)
+        self.notes = QTextEdit(data.get("notes") or ""); form.addRow("notes", self.notes)
+
+        for name in ["sds_local_path", "sds_url", "sds_status"]:
+            w = QLineEdit(str(data.get(name, "") or ""))
+            self.fields[name] = w
+            form.addRow(name, w)
+
+        self.status = QComboBox(); self.status.addItems(["active", "empty", "disposed", "archived", "error_duplicate"]); self.status.setCurrentText(data.get("status", "active")); form.addRow("status", self.status)
 
         layout.addLayout(form)
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -61,7 +85,9 @@ class ChemicalFormDialog(QDialog):
 
     def get_data(self):
         d = {k: (v.text().strip() or None) for k, v in self.fields.items()}
+        d["physical_state"] = self.physical_state.currentText()
         d["quantity"] = self.quantity.value() if self.quantity.value() else None
+        d["unit"] = self.unit.text().strip() or None
         d["status"] = self.status.currentText()
         d["hazard_text"] = self.hazard.toPlainText().strip() or None
         d["notes"] = self.notes.toPlainText().strip() or None
