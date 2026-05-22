@@ -188,20 +188,15 @@ class MainWindow(QMainWindow):
         if not codes:
             return
         w = QWidget(); ly = QHBoxLayout(w); ly.setContentsMargins(2, 2, 2, 2); ly.setSpacing(2)
-        has_image = False
         for code in codes:
             pic = get_pictogram_path(code, self.base_dir)
             lab = QLabel()
+            lab.setToolTip(f"{code} - {ghs_label(code)}")
             if pic.exists():
-                has_image = True
                 lab.setPixmap(QPixmap(str(pic)).scaled(QSize(24, 24), Qt.KeepAspectRatio, Qt.SmoothTransformation))
-                lab.setToolTip(f"{code} - {ghs_label(code)}")
+            else:
+                lab.setText(code)
             ly.addWidget(lab)
-        if not has_image:
-            for code in codes:
-                fallback = QLabel(code)
-                fallback.setToolTip(f"{code} - {ghs_label(code)}")
-                ly.addWidget(fallback)
         ly.addStretch(1)
         self.table.setCellWidget(row, 6, w)
 
