@@ -12,6 +12,7 @@ from .import_export import backup_database, export_rows, import_csv
 from .sds_tools import build_search_urls, open_local_sds
 from .ui_dashboard import DashboardPage
 from .ui_forms import ChemicalFormDialog
+from .ui_logs import LogsPage
 
 
 class NumericTableWidgetItem(QTableWidgetItem):
@@ -59,6 +60,7 @@ class MainWindow(QMainWindow):
         b_inv = QPushButton("Inventory"); b_inv.clicked.connect(self.show_inventory); left.addWidget(b_inv)
         b_add = QPushButton("Add Chemical"); b_add.clicked.connect(self.add_chemical); left.addWidget(b_add)
         b_dash = QPushButton("Dashboard"); b_dash.clicked.connect(self.show_dashboard); left.addWidget(b_dash)
+        b_logs = QPushButton("Logs"); b_logs.clicked.connect(self.show_logs); left.addWidget(b_logs)
         left.addStretch(1)
 
         self.stack = QStackedWidget(); h.addWidget(self.stack, 8)
@@ -93,8 +95,10 @@ class MainWindow(QMainWindow):
         right.addStretch(1)
 
         self.dashboard = DashboardPage(self.db)
+        self.logs_page = LogsPage(self.db)
         self.stack.addWidget(inv_page)
         self.stack.addWidget(self.dashboard)
+        self.stack.addWidget(self.logs_page)
 
     def current_mode(self) -> str:
         return "Admin" if self.is_admin else "Regular"
@@ -143,6 +147,10 @@ class MainWindow(QMainWindow):
     def show_dashboard(self):
         self.dashboard.refresh()
         self.stack.setCurrentIndex(1)
+
+    def show_logs(self):
+        self.logs_page.refresh()
+        self.stack.setCurrentWidget(self.logs_page)
 
     def refresh(self):
         rows = self.db.list_chemicals()
