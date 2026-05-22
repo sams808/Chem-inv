@@ -2,7 +2,7 @@ import webbrowser
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QFileDialog, QHBoxLayout, QInputDialog,
                                QLabel, QLineEdit, QMainWindow, QMenuBar, QMessageBox, QPushButton, QStackedWidget,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
@@ -26,6 +26,13 @@ class NumericTableWidgetItem(QTableWidgetItem):
 
 class MainWindow(QMainWindow):
     ADMIN_ONLY_ACTIONS = {"import", "clear", "backup", "delete"}
+    STATUS_COLORS = {
+        "active": QColor("#4CAF50"),
+        "empty": QColor("#FFA726"),
+        "disposed": QColor("#9E9E9E"),
+        "archived": QColor("#EF5350"),
+        "error_duplicate": QColor("#AB47BC"),
+    }
 
     def __init__(self, db, base_dir: Path):
         super().__init__()
@@ -184,7 +191,13 @@ class MainWindow(QMainWindow):
                     if j == 6:
                         continue
                     item = NumericTableWidgetItem("" if v is None else str(v)) if j == 2 else QTableWidgetItem("" if v is None else str(v))
-                    if j == 0: item.setData(Qt.UserRole, r["id"])
+                    if j == 0:
+                        item.setData(Qt.UserRole, r["id"])
+                    if j == 7:
+                        status = (str(v).strip().lower() if v is not None else "")
+                        color = self.STATUS_COLORS.get(status)
+                        if color:
+                            item.setForeground(color)
                     self.table.setItem(i, j, item)
                 self._set_ghs_cell(i, r["ghs_codes"])
         finally:
