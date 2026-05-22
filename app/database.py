@@ -92,6 +92,11 @@ class DatabaseManager:
         with self.connect() as conn:
             conn.execute(f"UPDATE chemicals SET {sets} WHERE id=?", tuple(data.values()) + (chemical_id,))
 
+
+    def delete_chemical(self, chemical_id: int):
+        with self.connect() as conn:
+            conn.execute("DELETE FROM chemicals WHERE id=?", (chemical_id,))
+
     def clear_inventory(self, mode: str = "Regular"):
         with self.connect() as conn:
             conn.execute("DELETE FROM chemicals")

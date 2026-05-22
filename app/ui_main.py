@@ -83,7 +83,12 @@ class MainWindow(QMainWindow):
         b_copy_name = QPushButton("Copy name"); b_copy_name.clicked.connect(self.copy_name)
         b_copy_cas = QPushButton("Copy CAS"); b_copy_cas.clicked.connect(self.copy_cas)
         copy_row.addWidget(b_copy_name); copy_row.addWidget(b_copy_cas); right.addLayout(copy_row)
-        for text, cb in [("Edit", self.edit_current), ("Move", self.move_current), ("Delete", self.delete_current), ("Mark Empty", lambda: self.mark_state("empty", "MARK_EMPTY")), ("Mark Disposed", lambda: self.mark_state("disposed", "MARK_DISPOSED")), ("Archive", lambda: self.mark_state("archived", "ARCHIVE")), ("Open SDS", self.open_sds), ("Search SDS Online", self.search_sds)]:
+        for text, cb in [("Edit", self.edit_current), ("Move", self.move_current)]:
+            b = QPushButton(text); b.clicked.connect(cb); right.addWidget(b)
+        self.delete_btn = QPushButton("Delete")
+        self.delete_btn.clicked.connect(self.delete_current)
+        right.addWidget(self.delete_btn)
+        for text, cb in [("Mark Empty", lambda: self.mark_state("empty", "MARK_EMPTY")), ("Mark Disposed", lambda: self.mark_state("disposed", "MARK_DISPOSED")), ("Archive", lambda: self.mark_state("archived", "ARCHIVE")), ("Open SDS", self.open_sds), ("Search SDS Online", self.search_sds)]:
             b = QPushButton(text); b.clicked.connect(cb); right.addWidget(b)
         right.addStretch(1)
 
@@ -103,6 +108,8 @@ class MainWindow(QMainWindow):
         self._update_mode_ui()
         for action in (self.import_action_ref, self.clear_action_ref, self.backup_action_ref):
             action.setEnabled(enabled)
+        if hasattr(self, "delete_btn"):
+            self.delete_btn.setEnabled(enabled)
 
     def require_admin(self, action_name: str) -> bool:
         if action_name not in self.ADMIN_ONLY_ACTIONS or self.is_admin:
@@ -258,9 +265,11 @@ class MainWindow(QMainWindow):
         msg = f"Delete {r['name']} (CAS: {r['cas'] or '-'}) from inventory?"
         if QMessageBox.question(self, "Confirm delete", msg) != QMessageBox.Yes:
             return
-        with self.db.connect() as conn:
-            conn.execute("DELETE FROM chemicals WHERE id=?", (r["id"],))
-        self.db.log_action("DELETE", r["id"], r["name"], r["cas"], "manual delete", mode=self.current_mode())
+        chemical_id = r["id"]
+        chemical_name = r["name"]
+        chemical_cas = r["cas"]
+        self.db.log_action("DELETE", chemical_id, chemical_name, chemical_cas, "manual delete", mode=self.current_mode())
+        self.db.delete_chemical(chemical_id)
         self.current_id = None
         self.refresh()
 
