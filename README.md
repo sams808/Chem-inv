@@ -33,6 +33,9 @@ Chem-inv/
   README.md                # Project overview and developer setup
   docs/
     user_manual.md         # In-app user guide
+  scripts/
+    install_chem_inv_windows.ps1
+    update_chem_inv_windows.ps1
   app/
     database.py            # SQLite database layer
     import_export.py       # CSV import/export and DB backup helpers
@@ -54,7 +57,56 @@ Chem-inv/
 
 Generated files in `data/exports/`, `data/logs/`, local SDS files, and `data/inventory.db` should normally stay out of Git.
 
-## Installation
+## Quick installation on a Windows lab computer
+
+For a lab computer that does not already have Python or Git, use the installer script.
+
+From PowerShell, run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Then run the installer from the repository checkout:
+
+```powershell
+.\scripts\install_chem_inv_windows.ps1
+```
+
+The installer script:
+
+- checks for `winget`
+- installs Git if needed
+- installs Python 3.11 if needed
+- clones or updates Chem-inv in `%USERPROFILE%\Chem-inv`
+- creates a `.venv`
+- installs `requirements.txt`
+- runs a compile check
+- creates `launch_chem_inv.ps1`
+- creates a desktop shortcut named `Chem-inv`
+
+The installer requires internet access. If `winget` is not available, install Microsoft App Installer first, or install Git and Python manually.
+
+## Updating an existing Windows installation
+
+After Chem-inv has already been installed on a lab computer, update it with:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+powershell.exe -ExecutionPolicy Bypass -File "$env:USERPROFILE\Chem-inv\scripts\update_chem_inv_windows.ps1"
+```
+
+The updater script:
+
+- runs `git pull --ff-only`
+- recreates `.venv` if missing
+- updates `pip`
+- reinstalls dependencies from `requirements.txt`
+- runs a compile check
+
+The updater refuses to run if local uncommitted changes are present, so it does not accidentally overwrite local work.
+
+## Manual installation
 
 Recommended environment: Python 3.11 on Windows.
 
@@ -82,6 +134,8 @@ pip install -r requirements.txt
 python main.py
 ```
 
+The Windows installer also creates a desktop shortcut that launches the app through the local virtual environment.
+
 The app creates and uses a local database at:
 
 ```text
@@ -94,10 +148,10 @@ The app starts in Regular mode. Sensitive actions require Admin mode.
 
 Before importing real inventory data:
 
-1. Install dependencies in a virtual environment.
+1. Install dependencies, either manually or with `scripts/install_chem_inv_windows.ps1`.
 2. Add GHS pictogram files to `data/ghs_pictograms/`.
 3. Put source CSV inventory files in `data/imports/`.
-4. Launch the app with `python main.py`.
+4. Launch the app with `python main.py` or the desktop shortcut.
 5. Open `Help > User Manual` and review the user workflow.
 6. Switch to Admin mode only when you need import, replace, clear, backup, or delete operations.
 
