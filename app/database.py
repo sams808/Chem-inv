@@ -39,10 +39,11 @@ class DatabaseManager:
               status TEXT DEFAULT 'active', date_added TEXT, date_modified TEXT);
             CREATE TABLE IF NOT EXISTS logs (
               id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL, action TEXT NOT NULL,
-              chemical_id INTEGER, chemical_name TEXT, cas TEXT, details TEXT, user TEXT);
+              chemical_id INTEGER, chemical_name TEXT, cas TEXT, details TEXT, user TEXT, mode TEXT);
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
             """)
             self._ensure_column(conn, "chemicals", "location_code", "TEXT")
+            self._ensure_column(conn, "logs", "mode", "TEXT")
             conn.execute(
                 """
                 UPDATE chemicals
@@ -91,18 +92,25 @@ class DatabaseManager:
         with self.connect() as conn:
             conn.execute(f"UPDATE chemicals SET {sets} WHERE id=?", tuple(data.values()) + (chemical_id,))
 
-    def clear_inventory(self):
+    def clear_inventory(self, mode: str = "Regular"):
         with self.connect() as conn:
             conn.execute("DELETE FROM chemicals")
             conn.execute("DELETE FROM sqlite_sequence WHERE name='chemicals'")
-        self.log_action("CLEAR_INVENTORY", None, "inventory", None, "cleared all chemicals")
+        self.log_action("CLEAR_INVENTORY", None, "inventory", None, "cleared all chemicals", mode=mode)
 
     def list_chemicals(self):
         with self.connect() as conn:
             return conn.execute("SELECT * FROM chemicals ORDER BY name COLLATE NOCASE").fetchall()
 
-    def log_action(self, action: str, chemical_id: int | None, chemical_name: str, cas: str | None, details: str = "", user: str = "local_user"):
+    def list_logs(self):
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM logs ORDER BY id DESC").fetchall()
+
+    def log_action(self, action: str, chemical_id: int | None, chemical_name: str, cas: str | None, details: str = "", user: str = "local_user", mode: str = "Regular"):
         ts = now_iso()
         with self.connect() as conn:
-            conn.execute("INSERT INTO logs (timestamp, action, chemical_id, chemical_name, cas, details, user) VALUES (?,?,?,?,?,?,?)", (ts, action, chemical_id, chemical_name, cas, details, user))
-        append_log_line(self.log_path, action, chemical_name, cas, details, user)
+            conn.execute(
+                "INSERT INTO logs (timestamp, action, chemical_id, chemical_name, cas, details, user, mode) VALUES (?,?,?,?,?,?,?,?)",
+                (ts, action, chemical_id, chemical_name, cas, details, user, mode),
+            )
+        append_log_line(self.log_path, action, chemical_name, cas, details, user, mode)
