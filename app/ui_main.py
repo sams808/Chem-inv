@@ -23,7 +23,7 @@ class NumericTableWidgetItem(QTableWidgetItem):
 
 
 class MainWindow(QMainWindow):
-    ADMIN_ONLY_ACTIONS = {"import", "clear", "backup"}
+    ADMIN_ONLY_ACTIONS = {"import", "clear", "backup", "delete"}
 
     def __init__(self, db, base_dir: Path):
         super().__init__()
@@ -31,7 +31,8 @@ class MainWindow(QMainWindow):
         self.base_dir = base_dir
         self.current_id = None
         self.is_admin = False
-        self.setWindowTitle("Lab Chemical Inventory Manager")
+        self.base_title = "Lab Chemical Inventory Manager"
+        self.setWindowTitle(self.base_title)
         self.resize(1280, 800)
         self._menu()
         self._ui()
@@ -46,6 +47,9 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Export Active Inventory CSV", self.export_active)
         file_menu.addAction("Export Logs CSV", self.export_logs)
         self.backup_action_ref = file_menu.addAction("Backup Database", self.backup_action)
+        mode_menu = mb.addMenu("Mode")
+        mode_menu.addAction("Regular", lambda: self.set_admin_mode(False))
+        mode_menu.addAction("Admin", self.activate_admin_mode)
         self.setMenuBar(mb)
 
     def _ui(self):
@@ -55,11 +59,6 @@ class MainWindow(QMainWindow):
         b_inv = QPushButton("Inventory"); b_inv.clicked.connect(self.show_inventory); left.addWidget(b_inv)
         b_add = QPushButton("Add Chemical"); b_add.clicked.connect(self.add_chemical); left.addWidget(b_add)
         b_dash = QPushButton("Dashboard"); b_dash.clicked.connect(self.show_dashboard); left.addWidget(b_dash)
-        left.addWidget(QPushButton("Logs")); left.addWidget(QPushButton("Settings"))
-        self.mode_label = QLabel()
-        self.unlock_admin_btn = QPushButton("Unlock Admin"); self.unlock_admin_btn.clicked.connect(self.unlock_admin)
-        self.lock_admin_btn = QPushButton("Lock Admin"); self.lock_admin_btn.clicked.connect(lambda: self.set_admin_mode(False))
-        left.addWidget(self.mode_label); left.addWidget(self.unlock_admin_btn); left.addWidget(self.lock_admin_btn)
         left.addStretch(1)
 
         self.stack = QStackedWidget(); h.addWidget(self.stack, 8)
@@ -84,7 +83,7 @@ class MainWindow(QMainWindow):
         b_copy_name = QPushButton("Copy name"); b_copy_name.clicked.connect(self.copy_name)
         b_copy_cas = QPushButton("Copy CAS"); b_copy_cas.clicked.connect(self.copy_cas)
         copy_row.addWidget(b_copy_name); copy_row.addWidget(b_copy_cas); right.addLayout(copy_row)
-        for text, cb in [("Edit", self.edit_current), ("Move", self.move_current), ("Mark Empty", lambda: self.mark_state("empty", "MARK_EMPTY")), ("Mark Disposed", lambda: self.mark_state("disposed", "MARK_DISPOSED")), ("Archive", lambda: self.mark_state("archived", "ARCHIVE")), ("Open SDS", self.open_sds), ("Search SDS Online", self.search_sds)]:
+        for text, cb in [("Edit", self.edit_current), ("Move", self.move_current), ("Delete", self.delete_current), ("Mark Empty", lambda: self.mark_state("empty", "MARK_EMPTY")), ("Mark Disposed", lambda: self.mark_state("disposed", "MARK_DISPOSED")), ("Archive", lambda: self.mark_state("archived", "ARCHIVE")), ("Open SDS", self.open_sds), ("Search SDS Online", self.search_sds)]:
             b = QPushButton(text); b.clicked.connect(cb); right.addWidget(b)
         right.addStretch(1)
 
@@ -92,11 +91,16 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(inv_page)
         self.stack.addWidget(self.dashboard)
 
+    def current_mode(self) -> str:
+        return "Admin" if self.is_admin else "Regular"
+
+    def _update_mode_ui(self):
+        self.statusBar().showMessage(f"Mode: {self.current_mode()}")
+        self.setWindowTitle(f"{self.base_title} — Mode: {self.current_mode()}")
+
     def set_admin_mode(self, enabled: bool):
         self.is_admin = enabled
-        self.mode_label.setText("Mode: Admin" if enabled else "Mode: Normal")
-        self.unlock_admin_btn.setVisible(not enabled)
-        self.lock_admin_btn.setVisible(enabled)
+        self._update_mode_ui()
         for action in (self.import_action_ref, self.clear_action_ref, self.backup_action_ref):
             action.setEnabled(enabled)
 
@@ -112,8 +116,18 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Access denied", "Incorrect admin PIN.")
         return False
 
-    def unlock_admin(self):
-        self.require_admin("import")
+    def activate_admin_mode(self):
+        if self.is_admin:
+            return
+        pin, ok = QInputDialog.getText(self, "Admin PIN", "Enter admin PIN:", QLineEdit.Password)
+        if not ok:
+            self.set_admin_mode(False)
+            return
+        if self.db.verify_admin_pin(pin):
+            self.set_admin_mode(True)
+            return
+        QMessageBox.warning(self, "Access denied", "Incorrect admin PIN.")
+        self.set_admin_mode(False)
 
     def show_inventory(self):
         self.stack.setCurrentIndex(0)
@@ -233,6 +247,21 @@ class MainWindow(QMainWindow):
         if not r: return
         self.db.update_chemical(r["id"], {"status": status})
         self.db.log_action(action, r["id"], r["name"], r["cas"], f"set status {status}")
+        self.refresh()
+
+    def delete_current(self):
+        if not self.require_admin("delete"):
+            return
+        r = self._get_current()
+        if not r:
+            return
+        msg = f"Delete {r['name']} (CAS: {r['cas'] or '-'}) from inventory?"
+        if QMessageBox.question(self, "Confirm delete", msg) != QMessageBox.Yes:
+            return
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM chemicals WHERE id=?", (r["id"],))
+        self.db.log_action("DELETE", r["id"], r["name"], r["cas"], "manual delete")
+        self.current_id = None
         self.refresh()
 
     def open_sds(self):
