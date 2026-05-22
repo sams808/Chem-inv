@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
         d = ChemicalFormDialog(self)
         if d.exec():
             data = d.get_data(); cid = self.db.add_chemical(data)
-            self.db.log_action("ADD", cid, data.get("name", ""), data.get("cas"), "manual add")
+            self.db.log_action("ADD", cid, data.get("name", ""), data.get("cas"), "manual add", mode=self.current_mode())
             self.refresh()
 
     def edit_current(self):
@@ -230,7 +230,7 @@ class MainWindow(QMainWindow):
         d = ChemicalFormDialog(self, dict(r))
         if d.exec():
             data = d.get_data(); self.db.update_chemical(r["id"], data)
-            self.db.log_action("EDIT", r["id"], data.get("name") or r["name"], data.get("cas") or r["cas"], "manual edit")
+            self.db.log_action("EDIT", r["id"], data.get("name") or r["name"], data.get("cas") or r["cas"], "manual edit", mode=self.current_mode())
             self.refresh()
 
     def move_current(self):
@@ -239,14 +239,14 @@ class MainWindow(QMainWindow):
         text, ok = QInputDialog.getText(self, "Location", "New location code:", text=r["location_code"] or "")
         if ok:
             self.db.update_chemical(r["id"], {"location_code": text.strip() or None})
-            self.db.log_action("MOVE", r["id"], r["name"], r["cas"], "location update")
+            self.db.log_action("MOVE", r["id"], r["name"], r["cas"], "location update", mode=self.current_mode())
             self.refresh()
 
     def mark_state(self, status, action):
         r = self._get_current();
         if not r: return
         self.db.update_chemical(r["id"], {"status": status})
-        self.db.log_action(action, r["id"], r["name"], r["cas"], f"set status {status}")
+        self.db.log_action(action, r["id"], r["name"], r["cas"], f"set status {status}", mode=self.current_mode())
         self.refresh()
 
     def delete_current(self):
@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
             return
         with self.db.connect() as conn:
             conn.execute("DELETE FROM chemicals WHERE id=?", (r["id"],))
-        self.db.log_action("DELETE", r["id"], r["name"], r["cas"], "manual delete")
+        self.db.log_action("DELETE", r["id"], r["name"], r["cas"], "manual delete", mode=self.current_mode())
         self.current_id = None
         self.refresh()
 
@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Cancelled", "Clear cancelled.")
             return
         backup_database(self.db.db_path, self.base_dir / "data/exports")
-        self.db.clear_inventory()
+        self.db.clear_inventory(mode=self.current_mode())
         self.refresh()
 
     def import_csv_action(self):
@@ -303,33 +303,41 @@ class MainWindow(QMainWindow):
         if mode.startswith("Replace"):
             if QMessageBox.question(self, "Confirm replace", "Replace current inventory with CSV content?") != QMessageBox.Yes:
                 return
-            self.db.clear_inventory(); action = "IMPORT_REPLACE"
+            self.db.clear_inventory(mode=self.current_mode()); action = "IMPORT_REPLACE"
         else:
             action = "IMPORT_APPEND"
         n = import_csv(self.db, Path(f))
-        self.db.log_action(action, None, "inventory", None, f"imported {n} rows from {f}")
+        self.db.log_action(action, None, "inventory", None, f"imported {n} rows from {f}", mode=self.current_mode())
         QMessageBox.information(self, "Import", f"Imported {n} rows")
         self.refresh()
 
     def export_all(self):
         f, _ = QFileDialog.getSaveFileName(self, "Export Inventory", str(self.base_dir / "data/exports"), "CSV (*.csv)")
         if f:
-            export_rows(self.db.list_chemicals(), Path(f)); self.db.log_action("EXPORT", None, "inventory", None, f)
+            export_rows(self.db.list_chemicals(), Path(f)); self.db.log_action("EXPORT", None, "inventory", None, f, mode=self.current_mode())
 
     def export_active(self):
         f, _ = QFileDialog.getSaveFileName(self, "Export Active", str(self.base_dir / "data/exports"), "CSV (*.csv)")
         if f:
             rows = [r for r in self.db.list_chemicals() if r["status"] == "active"]
-            export_rows(rows, Path(f)); self.db.log_action("EXPORT", None, "active inventory", None, f)
+            export_rows(rows, Path(f)); self.db.log_action("EXPORT", None, "active inventory", None, f, mode=self.current_mode())
 
     def export_logs(self):
         f, _ = QFileDialog.getSaveFileName(self, "Export Logs", str(self.base_dir / "data/exports"), "CSV (*.csv)")
         if not f: return
         with self.db.connect() as conn:
             rows = conn.execute("SELECT * FROM logs ORDER BY id").fetchall()
-        export_rows(rows, Path(f)); self.db.log_action("EXPORT", None, "logs", None, f)
+        export_rows(rows, Path(f)); self.db.log_action("EXPORT", None, "logs", None, f, mode=self.current_mode())
 
     def backup_action(self):
         if not self.require_admin("backup"): return
         b = backup_database(self.db.db_path, self.base_dir / "data/exports")
+        self.db.log_action(
+            "BACKUP",
+            None,
+            "database",
+            None,
+            str(b),
+            mode=self.current_mode(),
+        )
         QMessageBox.information(self, "Backup", f"Backup: {b}")
