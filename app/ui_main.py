@@ -71,6 +71,7 @@ class MainWindow(QMainWindow):
         self.status_filter.currentTextChanged.connect(self.refresh); mid.addWidget(self.status_filter)
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(["Name", "CAS", "Quantity", "Unit", "Location", "State", "GHS", "Status"])
+        self.table.setColumnWidth(6, 170)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
@@ -138,9 +139,11 @@ class MainWindow(QMainWindow):
 
         self.table.setSortingEnabled(False); self.table.blockSignals(True)
         try:
-            self.table.clearContents(); self.table.setRowCount(len(filtered))
+            self.table.clearContents()
+            self.table.setRowCount(0)
+            self.table.setRowCount(len(filtered))
             for i, r in enumerate(filtered):
-                vals = [r["name"], r["cas"], r["quantity"], r["unit"], r["location_code"], r["physical_state"], r["ghs_codes"], r["status"]]
+                vals = [r["name"], r["cas"], r["quantity"], r["unit"], r["location_code"], r["physical_state"], None, r["status"]]
                 for j, v in enumerate(vals):
                     if j == 6:
                         continue
@@ -156,15 +159,20 @@ class MainWindow(QMainWindow):
         if not codes:
             return
         w = QWidget(); ly = QHBoxLayout(w); ly.setContentsMargins(2, 2, 2, 2); ly.setSpacing(2)
+        has_image = False
         for code in codes:
             pic = get_pictogram_path(code, self.base_dir)
             lab = QLabel()
             if pic.exists():
+                has_image = True
                 lab.setPixmap(QPixmap(str(pic)).scaled(QSize(24, 24), Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 lab.setToolTip(f"{code} - {ghs_label(code)}")
-            else:
-                lab.setText(code)
             ly.addWidget(lab)
+        if not has_image:
+            for code in codes:
+                fallback = QLabel(code)
+                fallback.setToolTip(f"{code} - {ghs_label(code)}")
+                ly.addWidget(fallback)
         ly.addStretch(1)
         self.table.setCellWidget(row, 6, w)
 
