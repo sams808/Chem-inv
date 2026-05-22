@@ -142,6 +142,8 @@ class MainWindow(QMainWindow):
             for i, r in enumerate(filtered):
                 vals = [r["name"], r["cas"], r["quantity"], r["unit"], r["location_code"], r["physical_state"], r["ghs_codes"], r["status"]]
                 for j, v in enumerate(vals):
+                    if j == 6:
+                        continue
                     item = NumericTableWidgetItem("" if v is None else str(v)) if j == 2 else QTableWidgetItem("" if v is None else str(v))
                     if j == 0: item.setData(Qt.UserRole, r["id"])
                     self.table.setItem(i, j, item)
